@@ -1,0 +1,12 @@
+[package]
+name = "tf2"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tf2-protobuf = { version = "0.1.0", path = "./tf2-protobuf" }
+steam-vent = { version = "0.1.0", path = "../steam-vent" }
+protobuf = "=2.24.1"
+thiserror = "1"
+bytes = "1"
+byteorder = "1"
