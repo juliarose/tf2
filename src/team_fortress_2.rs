@@ -12,22 +12,22 @@ use tf2_protobuf::{
     econ_gcmessages::EGCItemMsg,
     base_gcmessages::CMsgGCRemoveCustomizationAttributeSimple,
 };
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{LittleEndian, WriteBytesExt};
 use bytes::{BufMut, BytesMut};
-use std::io::{Cursor, Read, Write};
+use std::io::Write;
 use crate::app::App;
 
 pub const JOBID_NONE: u64 = u64::MAX;
 
-pub struct GameCoordinator {
+pub struct TF2 {
     source_job_id: u64,
 }
 
-impl App for GameCoordinator {
+impl App for TF2 {
     const APPID: u32 = 440;
 }
 
-impl GameCoordinator {
+impl TF2 {
     
     pub fn new() -> Self {
         Self {

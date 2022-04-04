@@ -1,8 +1,8 @@
 
 mod message;
-mod gc;
+mod team_fortress_2;
 pub mod bytes_message;
 pub mod app;
 
 pub use tf2_protobuf as proto;
-pub use gc::GameCoordinator;
+pub use team_fortress_2::TF2;

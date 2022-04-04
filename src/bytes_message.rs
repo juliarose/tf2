@@ -1,6 +1,6 @@
 use bytes::BytesMut;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use std::io::{Cursor, Read, Write};
+use byteorder::{LittleEndian, ReadBytesExt};
+use std::io::Cursor;
 use std::fmt::Debug;
 
 pub type GCBytesMessageError = std::io::Error;
