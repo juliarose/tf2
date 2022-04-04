@@ -1,0 +1,15 @@
+[package]
+name = "tf2-protobuf"
+version = "0.1.0"
+edition = "2021"
+authors = ["Julia"]
+homepage = "https://github.com/juliarose/tf2-gc"
+repository = "https://github.com/juliarose/tf2-gc"
+license = "MIT"
+keywords = ["tf2", "steam"]
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+protobuf = "=2.24.1"
