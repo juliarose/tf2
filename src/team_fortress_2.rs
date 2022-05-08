@@ -10,7 +10,10 @@ use steam_vent::{
 };
 use tf2_protobuf::{
     econ_gcmessages::EGCItemMsg,
-    base_gcmessages::CMsgGCRemoveCustomizationAttributeSimple,
+    base_gcmessages::{
+        CMsgUseItem,
+        CMsgGCRemoveCustomizationAttributeSimple,
+    },
 };
 use byteorder::{LittleEndian, WriteBytesExt};
 use bytes::{BufMut, BytesMut};
@@ -40,28 +43,45 @@ impl TF2 {
         self.source_job_id
     }
     
-    async fn send(&self, connection: &mut Connection, msg: ClientToGCMessage) -> Result<u64, NetworkError> {
+    async fn send(
+        &self,
+        connection: &mut Connection,
+        msg: ClientToGCMessage,
+    ) -> Result<u64, NetworkError> {
         connection.send_gc(msg).await
     }
     
-    pub async fn remove_gifted_by(&mut self, connection: &mut Connection, item_id: u64) -> Result<u64, NetworkError> {
+    pub async fn remove_gifted_by(
+        &mut self,
+        connection: &mut Connection,
+        item_id: u64,
+    ) -> Result<u64, NetworkError> {
         let msgtype = EGCItemMsg::k_EMsgGCRemoveGiftedBy as i32;
         let mut msg = ClientToGCMessage::new(Self::APPID, msgtype);
-        let mut remove_customization = CMsgGCRemoveCustomizationAttributeSimple::new();
+        let mut message = CMsgGCRemoveCustomizationAttributeSimple::new();
         
-        remove_customization.set_item_id(item_id);
+        message.set_item_id(item_id);
         msg.0.set_payload(self.proto_payload(
-            remove_customization,
+            message,
             msgtype,
         )?);
         self.send(connection, msg).await
     }
     
-    pub async fn craft(&mut self, connection: &mut Connection, items: &[u64]) -> Result<u64, NetworkError> {
+    pub async fn craft(
+        &mut self,
+        connection: &mut Connection,
+        items: &[u64],
+    ) -> Result<u64, NetworkError> {
         self.craft_recipe(connection,-2, items).await
     }
     
-    pub async fn craft_recipe(&mut self, connection: &mut Connection, recipe: i16, items: &[u64]) -> Result<u64, NetworkError> {
+    pub async fn craft_recipe(
+        &mut self,
+        connection: &mut Connection,
+        recipe: i16,
+        items: &[u64],
+    ) -> Result<u64, NetworkError> {
         let msgtype = EGCItemMsg::k_EMsgGCCraft as i32;
         let mut msg = ClientToGCMessage::new(Self::APPID, msgtype);
         let mut buff = BytesMut::with_capacity(
@@ -82,6 +102,23 @@ impl TF2 {
         
         msg.0.set_payload(payload);
         
+        self.send(connection, msg).await
+    }
+    
+    pub async fn use_item(
+        &mut self,
+        connection: &mut Connection,
+        item: u64,
+    ) -> Result<u64, NetworkError> {
+        let msgtype = EGCItemMsg::k_EMsgGCUseItemRequest as i32;
+        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype);
+        let mut message = CMsgUseItem::new();
+        
+        message.set_item_id(item);
+        msg.0.set_payload(self.proto_payload(
+            message,
+            msgtype,
+        )?);
         self.send(connection, msg).await
     }
     
