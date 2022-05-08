@@ -57,10 +57,27 @@ impl TF2 {
         item_id: u64,
     ) -> Result<u64, NetworkError> {
         let msgtype = EGCItemMsg::k_EMsgGCRemoveGiftedBy as i32;
-        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype);
+        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, true);
         let mut message = CMsgGCRemoveCustomizationAttributeSimple::new();
         
         message.set_item_id(item_id);
+        msg.0.set_payload(self.proto_payload(
+            message,
+            msgtype,
+        )?);
+        self.send(connection, msg).await
+    }
+    
+    pub async fn use_item(
+        &mut self,
+        connection: &mut Connection,
+        item: u64,
+    ) -> Result<u64, NetworkError> {
+        let msgtype = EGCItemMsg::k_EMsgGCUseItemRequest as i32;
+        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, true);
+        let mut message = CMsgUseItem::new();
+        
+        message.set_item_id(item);
         msg.0.set_payload(self.proto_payload(
             message,
             msgtype,
@@ -83,7 +100,7 @@ impl TF2 {
         items: &[u64],
     ) -> Result<u64, NetworkError> {
         let msgtype = EGCItemMsg::k_EMsgGCCraft as i32;
-        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype);
+        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, false);
         let mut buff = BytesMut::with_capacity(
             2 + 2 + (8 * items.len())
         );
@@ -96,29 +113,10 @@ impl TF2 {
             writer.write_u64::<LittleEndian>(*item)?;
         }
         
-        let payload = self.payload(
+        msg.0.set_payload(self.payload(
             buff,
-        )?;
-        
-        msg.0.set_payload(payload);
-        
-        self.send(connection, msg).await
-    }
-    
-    pub async fn use_item(
-        &mut self,
-        connection: &mut Connection,
-        item: u64,
-    ) -> Result<u64, NetworkError> {
-        let msgtype = EGCItemMsg::k_EMsgGCUseItemRequest as i32;
-        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype);
-        let mut message = CMsgUseItem::new();
-        
-        message.set_item_id(item);
-        msg.0.set_payload(self.proto_payload(
-            message,
-            msgtype,
         )?);
+        
         self.send(connection, msg).await
     }
     
@@ -134,7 +132,6 @@ impl TF2 {
         let mut writer = (&mut buff).writer();
         
         Self::write_proto_header(&mut writer, msg_type, source_job_id)?;
-        
         message.write_to_writer(&mut writer)?;
     
         Ok(buff.to_vec())
