@@ -1,11 +1,9 @@
 use protobuf::{RepeatedField, Message};
 use steam_vent::{
+    net::PROTO_MASK,
     net::NetworkError,
     connection::Connection,
-    proto::{
-        steammessages_base::CMsgProtoBufHeader,
-    },
-    net::PROTO_MASK,
+    proto::steammessages_base::CMsgProtoBufHeader,
     game_coordinator::ClientToGCMessage,
 };
 use tf2_protobuf::{
@@ -82,7 +80,7 @@ impl TeamFortress2 {
         
         writer.write_u64::<LittleEndian>(item_id)?;
         writer.write_u32::<LittleEndian>(0)?;
-        msg.0.set_payload(self.payload(
+        msg.set_payload(self.payload(
             buff,
         )?);
         self.send(connection, msg).await
@@ -100,7 +98,7 @@ impl TeamFortress2 {
         
         writer.write_u64::<LittleEndian>(item_id)?;
         writer.write_u32::<LittleEndian>(1)?;
-        msg.0.set_payload(self.payload(
+        msg.set_payload(self.payload(
             buff,
         )?);
         self.send(connection, msg).await
@@ -124,7 +122,7 @@ impl TeamFortress2 {
         let mut message = CMsgGCRemoveCustomizationAttributeSimple::new();
         
         message.set_item_id(item_id);
-        msg.0.set_payload(self.proto_payload(
+        msg.set_payload(self.proto_payload(
             message,
             msgtype,
         )?);
@@ -141,7 +139,7 @@ impl TeamFortress2 {
         let mut message = CMsgUseItem::new();
         
         message.set_item_id(item_id);
-        msg.0.set_payload(self.proto_payload(
+        msg.set_payload(self.proto_payload(
             message,
             msgtype,
         )?);
@@ -171,7 +169,7 @@ impl TeamFortress2 {
         
         message.set_tool_item_id(item_id);
         message.set_consumption_components(RepeatedField::from_vec(components));
-        msg.0.set_payload(self.proto_payload(
+        msg.set_payload(self.proto_payload(
             message,
             msgtype,
         )?);
@@ -189,7 +187,7 @@ impl TeamFortress2 {
         let mut writer = (&mut buff).writer();
         
         writer.write_u64::<LittleEndian>(item_id)?;
-        msg.0.set_payload(self.payload(
+        msg.set_payload(self.payload(
             buff,
         )?);
         self.send(connection, msg).await
@@ -221,7 +219,7 @@ impl TeamFortress2 {
             writer.write_u64::<LittleEndian>(*item_id)?;
         }
         
-        msg.0.set_payload(self.payload(
+        msg.set_payload(self.payload(
             buff,
         )?);
         self.send(connection, msg).await
@@ -232,13 +230,35 @@ impl TeamFortress2 {
         message: Msg,
         msg_type: i32,
     ) -> Result<Vec<u8>, std::io::Error> {
+        fn encode_size(source_job_id: u64) -> usize {
+            let mut proto_header = CMsgProtoBufHeader::new();
+            proto_header.set_jobid_source(source_job_id);
+            
+            4 + 4 + proto_header.compute_size() as usize
+        }
+        
+        fn write_header<W: WriteBytesExt>(
+            writer: &mut W,
+            msg_type: i32,
+            source_job_id: u64,
+        ) -> std::io::Result<()> {
+            let mut proto_header = CMsgProtoBufHeader::new();
+            // proto_header.set_jobid_target(self.target_job_id);
+            proto_header.set_jobid_source(source_job_id);
+            
+            writer.write_u32::<LittleEndian>(msg_type as u32 | PROTO_MASK)?;
+            writer.write_u32::<LittleEndian>(proto_header.compute_size())?;
+            proto_header.write_to_writer(writer)?;
+            Ok(())
+        }
+        
         let source_job_id = self.next_jobid();
         let mut buff = BytesMut::with_capacity(
-            Self::proto_encode_size(source_job_id) + message.compute_size() as usize
+            encode_size(source_job_id) + message.compute_size() as usize
         );
         let mut writer = (&mut buff).writer();
         
-        Self::write_proto_header(&mut writer, msg_type, source_job_id)?;
+        write_header(&mut writer, msg_type, source_job_id)?;
         message.write_to_writer(&mut writer)?;
     
         Ok(buff.to_vec())
@@ -248,53 +268,30 @@ impl TeamFortress2 {
         &mut self,
         message: BytesMut,
     ) -> Result<Vec<u8>, std::io::Error> {
+        fn encode_size() -> usize {
+            2 + 8 + 8 + 4
+        }
+        
+        fn write_header<W: WriteBytesExt>(
+            writer: &mut W,
+            source_job_id: u64,
+        ) -> std::io::Result<()> {
+            writer.write_u16::<LittleEndian>(1)?;
+            writer.write_u64::<LittleEndian>(JOBID_NONE)?;
+            writer.write_u64::<LittleEndian>(source_job_id)?;
+            Ok(())
+        }
+        
         let source_job_id = self.next_jobid();
         let mut buff = BytesMut::with_capacity(
-            Self::encode_size() + message.len() as usize
+            encode_size() + message.len() as usize
         );
         let mut writer = (&mut buff).writer();
         
-        Self::write_header(&mut writer, source_job_id)?;
+        write_header(&mut writer, source_job_id)?;
         
         writer.write(&message[..])?;
     
         Ok(buff.to_vec())
-    }
-    
-    fn write_proto_header<W: WriteBytesExt>(
-        writer: &mut W,
-        msg_type: i32,
-        source_job_id: u64,
-    ) -> std::io::Result<()> {
-        let mut proto_header = CMsgProtoBufHeader::new();
-        // proto_header.set_jobid_target(self.target_job_id);
-        proto_header.set_jobid_source(source_job_id);
-        
-        writer.write_u32::<LittleEndian>(msg_type as u32 | PROTO_MASK)?;
-        writer.write_u32::<LittleEndian>(proto_header.compute_size())?;
-        proto_header.write_to_writer(writer)?;
-        
-        Ok(())
-    }
-    
-    fn proto_encode_size(source_job_id: u64) -> usize {
-        let mut proto_header = CMsgProtoBufHeader::new();
-        proto_header.set_jobid_source(source_job_id);
-        
-        4 + 4 + proto_header.compute_size() as usize
-    }
-    
-    fn write_header<W: WriteBytesExt>(
-        writer: &mut W,
-        source_job_id: u64,
-    ) -> std::io::Result<()> {
-        writer.write_u16::<LittleEndian>(1)?;
-        writer.write_u64::<LittleEndian>(JOBID_NONE)?;
-        writer.write_u64::<LittleEndian>(source_job_id)?;
-        Ok(())
-    }
-    
-    fn encode_size() -> usize {
-        2 + 8 + 8 + 4
     }
 }
