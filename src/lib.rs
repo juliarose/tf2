@@ -5,4 +5,4 @@ pub mod bytes_message;
 pub mod app;
 
 pub use tf2_protobuf as proto;
-pub use team_fortress_2::TF2;
+pub use team_fortress_2::TeamFortress2;

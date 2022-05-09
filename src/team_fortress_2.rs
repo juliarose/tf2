@@ -22,15 +22,15 @@ use crate::app::App;
 
 pub const JOBID_NONE: u64 = u64::MAX;
 
-pub struct TF2 {
+pub struct TeamFortress2 {
     source_job_id: u64,
 }
 
-impl App for TF2 {
+impl App for TeamFortress2 {
     const APPID: u32 = 440;
 }
 
-impl TF2 {
+impl TeamFortress2 {
     
     pub fn new() -> Self {
         Self {
