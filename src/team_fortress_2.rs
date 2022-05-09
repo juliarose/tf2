@@ -9,6 +9,8 @@ use steam_vent::{
 use tf2_protobuf::{
     econ_gcmessages::EGCItemMsg,
     base_gcmessages::{
+        CMsgSetItemPositions,
+        CMsgSetItemPositions_ItemPosition,
         CMsgUseItem,
         CMsgFulfillDynamicRecipeComponent,
         CMsgRecipeComponent,
@@ -18,7 +20,7 @@ use tf2_protobuf::{
 use byteorder::{LittleEndian, WriteBytesExt};
 use bytes::{BufMut, BytesMut};
 use std::io::Write;
-use crate::app::App;
+use crate::{request::{self, ItemCustomization}, app::App};
 
 pub const JOBID_NONE: u64 = u64::MAX;
 
@@ -29,22 +31,6 @@ pub struct TeamFortress2 {
 
 impl App for TeamFortress2 {
     const APPID: u32 = 440;
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ItemCustomization {
-    GiftedBy,
-    CraftedBy,
-    Decal,
-    Killstreak,
-    Paint,
-    Festivizer,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RecipeComponent {
-    pub subject_item_id: u64,
-    pub attribute_index: u64,
 }
 
 impl TeamFortress2 {
@@ -150,7 +136,7 @@ impl TeamFortress2 {
         &mut self,
         connection: &mut Connection,
         item_id: u64,
-        components: Vec<RecipeComponent>,
+        components: Vec<request::RecipeComponent>,
     ) -> Result<u64, NetworkError> {
         let msgtype = EGCItemMsg::k_EMsgGCFulfillDynamicRecipeComponent as i32;
         let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, true);
@@ -189,6 +175,72 @@ impl TeamFortress2 {
         writer.write_u64::<LittleEndian>(item_id)?;
         msg.set_payload(self.payload(
             buff,
+        )?);
+        self.send(connection, msg).await
+    }
+    
+    pub async fn set_style(
+        &mut self,
+        connection: &mut Connection,
+        item_id: u64,
+        style: u32,
+    ) -> Result<u64, NetworkError> {
+        let msgtype = EGCItemMsg::k_EMsgGCSetItemStyle as i32;
+        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, false);
+        let mut buff = BytesMut::with_capacity(12);
+        let mut writer = (&mut buff).writer();
+        
+        writer.write_u64::<LittleEndian>(item_id)?;
+        writer.write_u32::<LittleEndian>(style)?;
+        msg.set_payload(self.payload(
+            buff,
+        )?);
+        self.send(connection, msg).await
+    }
+    
+    pub async fn set_position(
+        &mut self,
+        connection: &mut Connection,
+        item_id: u64,
+        position: u64,
+    ) -> Result<u64, NetworkError> {
+        let msgtype = EGCItemMsg::k_EMsgGCSetSingleItemPosition as i32;
+        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, false);
+        let mut buff = BytesMut::with_capacity(16);
+        let mut writer = (&mut buff).writer();
+        
+        writer.write_u64::<LittleEndian>(item_id)?;
+        writer.write_u64::<LittleEndian>(position)?;
+        msg.set_payload(self.payload(
+            buff,
+        )?);
+        self.send(connection, msg).await
+    }
+    
+    pub async fn set_positions(
+        &mut self,
+        connection: &mut Connection,
+        set_item_positions: Vec<request::SetItemPosition>,
+    ) -> Result<u64, NetworkError> {
+        let msgtype = EGCItemMsg::k_EMsgGCSetItemPositions as i32;
+        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, true);
+        let mut message = CMsgSetItemPositions::new();
+        let set_item_positions = set_item_positions
+            .into_iter()
+            .map(|set_item_position| {
+                let mut message = CMsgSetItemPositions_ItemPosition::new();
+                
+                message.set_item_id(set_item_position.item_id);
+                message.set_position(set_item_position.position);
+                
+                message
+            })
+            .collect::<Vec<_>>();
+        
+        message.set_item_positions(RepeatedField::from_vec(set_item_positions));
+        msg.set_payload(self.proto_payload(
+            message,
+            msgtype,
         )?);
         self.send(connection, msg).await
     }
