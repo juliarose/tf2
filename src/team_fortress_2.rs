@@ -1,4 +1,4 @@
-use protobuf::Message;
+use protobuf::{RepeatedField, Message};
 use steam_vent::{
     net::NetworkError,
     connection::Connection,
@@ -12,6 +12,8 @@ use tf2_protobuf::{
     econ_gcmessages::EGCItemMsg,
     base_gcmessages::{
         CMsgUseItem,
+        CMsgFulfillDynamicRecipeComponent,
+        CMsgRecipeComponent,
         CMsgGCRemoveCustomizationAttributeSimple,
     },
 };
@@ -22,12 +24,29 @@ use crate::app::App;
 
 pub const JOBID_NONE: u64 = u64::MAX;
 
+#[derive(Debug)]
 pub struct TeamFortress2 {
     source_job_id: u64,
 }
 
 impl App for TeamFortress2 {
     const APPID: u32 = 440;
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ItemCustomization {
+    GiftedBy,
+    CraftedBy,
+    Decal,
+    Killstreak,
+    Paint,
+    Festivizer,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecipeComponent {
+    pub subject_item_id: u64,
+    pub attribute_index: u64,
 }
 
 impl TeamFortress2 {
@@ -51,12 +70,56 @@ impl TeamFortress2 {
         connection.send_gc(msg).await
     }
     
-    pub async fn remove_gifted_by(
+    pub async fn remove_item_name(
         &mut self,
         connection: &mut Connection,
         item_id: u64,
     ) -> Result<u64, NetworkError> {
-        let msgtype = EGCItemMsg::k_EMsgGCRemoveGiftedBy as i32;
+        let msgtype = EGCItemMsg::k_EMsgGCRemoveItemName as i32;
+        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, false);
+        let mut buff = BytesMut::with_capacity(12);
+        let mut writer = (&mut buff).writer();
+        
+        writer.write_u64::<LittleEndian>(item_id)?;
+        writer.write_u32::<LittleEndian>(0)?;
+        msg.0.set_payload(self.payload(
+            buff,
+        )?);
+        self.send(connection, msg).await
+    }
+    
+    pub async fn remove_item_description(
+        &mut self,
+        connection: &mut Connection,
+        item_id: u64,
+    ) -> Result<u64, NetworkError> {
+        let msgtype = EGCItemMsg::k_EMsgGCRemoveItemName as i32;
+        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, false);
+        let mut buff = BytesMut::with_capacity(12);
+        let mut writer = (&mut buff).writer();
+        
+        writer.write_u64::<LittleEndian>(item_id)?;
+        writer.write_u32::<LittleEndian>(1)?;
+        msg.0.set_payload(self.payload(
+            buff,
+        )?);
+        self.send(connection, msg).await
+    }
+    
+    pub async fn remove_customization(
+        &mut self,
+        connection: &mut Connection,
+        item_id: u64,
+        item_customization: &ItemCustomization,
+    ) -> Result<u64, NetworkError> {
+        let msgtype = match item_customization {
+            ItemCustomization::GiftedBy => EGCItemMsg::k_EMsgGCRemoveGiftedBy,
+            ItemCustomization::CraftedBy => EGCItemMsg::k_EMsgGCRemoveMakersMark,
+            ItemCustomization::Decal => EGCItemMsg::k_EMsgGCRemoveCustomTexture,
+            ItemCustomization::Killstreak => EGCItemMsg::k_EMsgGCRemoveKillStreak,
+            ItemCustomization::Paint => EGCItemMsg::k_EMsgGCRemoveItemPaint,
+            ItemCustomization::Festivizer=> EGCItemMsg::k_EMsgGCRemoveFestivizer,
+        } as i32;
         let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, true);
         let mut message = CMsgGCRemoveCustomizationAttributeSimple::new();
         
@@ -71,13 +134,43 @@ impl TeamFortress2 {
     pub async fn use_item(
         &mut self,
         connection: &mut Connection,
-        item: u64,
+        item_id: u64,
     ) -> Result<u64, NetworkError> {
         let msgtype = EGCItemMsg::k_EMsgGCUseItemRequest as i32;
         let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, true);
         let mut message = CMsgUseItem::new();
         
-        message.set_item_id(item);
+        message.set_item_id(item_id);
+        msg.0.set_payload(self.proto_payload(
+            message,
+            msgtype,
+        )?);
+        self.send(connection, msg).await
+    }
+    
+    pub async fn fulfill_recipe(
+        &mut self,
+        connection: &mut Connection,
+        item_id: u64,
+        components: Vec<RecipeComponent>,
+    ) -> Result<u64, NetworkError> {
+        let msgtype = EGCItemMsg::k_EMsgGCFulfillDynamicRecipeComponent as i32;
+        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, true);
+        let mut message = CMsgFulfillDynamicRecipeComponent::new();
+        let components = components
+            .into_iter()
+            .map(|component| {
+                let mut message = CMsgRecipeComponent::new();
+                
+                message.set_attribute_index(component.attribute_index);
+                message.set_subject_item_id(component.subject_item_id);
+                
+                message
+            })
+            .collect::<Vec<_>>();
+        
+        message.set_tool_item_id(item_id);
+        message.set_consumption_components(RepeatedField::from_vec(components));
         msg.0.set_payload(self.proto_payload(
             message,
             msgtype,
@@ -88,14 +181,14 @@ impl TeamFortress2 {
     pub async fn delete_item(
         &mut self,
         connection: &mut Connection,
-        item: u64,
+        item_id: u64,
     ) -> Result<u64, NetworkError> {
         let msgtype = EGCItemMsg::k_EMsgGCDelete as i32;
         let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, false);
         let mut buff = BytesMut::with_capacity(8);
         let mut writer = (&mut buff).writer();
         
-        writer.write_u64::<LittleEndian>(item)?;
+        writer.write_u64::<LittleEndian>(item_id)?;
         msg.0.set_payload(self.payload(
             buff,
         )?);
@@ -105,27 +198,27 @@ impl TeamFortress2 {
     pub async fn craft(
         &mut self,
         connection: &mut Connection,
-        items: &[u64],
+        item_ids: &[u64],
     ) -> Result<u64, NetworkError> {
-        self.craft_recipe(connection,-2, items).await
+        self.craft_recipe(connection,-2, item_ids).await
     }
     
     pub async fn craft_recipe(
         &mut self,
         connection: &mut Connection,
         recipe: i16,
-        items: &[u64],
+        item_ids: &[u64],
     ) -> Result<u64, NetworkError> {
         let msgtype = EGCItemMsg::k_EMsgGCCraft as i32;
         let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, false);
-        let mut buff = BytesMut::with_capacity(2 + 2 + (8 * items.len()));
+        let mut buff = BytesMut::with_capacity(2 + 2 + (8 * item_ids.len()));
         let mut writer = (&mut buff).writer();
         
         writer.write_i16::<LittleEndian>(recipe)?;
-        writer.write_i16::<LittleEndian>(items.len() as i16)?;
+        writer.write_i16::<LittleEndian>(item_ids.len() as i16)?;
         
-        for item in items {
-            writer.write_u64::<LittleEndian>(*item)?;
+        for item_id in item_ids {
+            writer.write_u64::<LittleEndian>(*item_id)?;
         }
         
         msg.0.set_payload(self.payload(
