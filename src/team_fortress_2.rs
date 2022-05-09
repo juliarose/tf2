@@ -85,6 +85,23 @@ impl TF2 {
         self.send(connection, msg).await
     }
     
+    pub async fn delete_item(
+        &mut self,
+        connection: &mut Connection,
+        item: u64,
+    ) -> Result<u64, NetworkError> {
+        let msgtype = EGCItemMsg::k_EMsgGCDelete as i32;
+        let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, false);
+        let mut buff = BytesMut::with_capacity(8);
+        let mut writer = (&mut buff).writer();
+        
+        writer.write_u64::<LittleEndian>(item)?;
+        msg.0.set_payload(self.payload(
+            buff,
+        )?);
+        self.send(connection, msg).await
+    }
+    
     pub async fn craft(
         &mut self,
         connection: &mut Connection,
@@ -101,9 +118,7 @@ impl TF2 {
     ) -> Result<u64, NetworkError> {
         let msgtype = EGCItemMsg::k_EMsgGCCraft as i32;
         let mut msg = ClientToGCMessage::new(Self::APPID, msgtype, false);
-        let mut buff = BytesMut::with_capacity(
-            2 + 2 + (8 * items.len())
-        );
+        let mut buff = BytesMut::with_capacity(2 + 2 + (8 * items.len()));
         let mut writer = (&mut buff).writer();
         
         writer.write_i16::<LittleEndian>(recipe)?;
@@ -116,7 +131,6 @@ impl TF2 {
         msg.0.set_payload(self.payload(
             buff,
         )?);
-        
         self.send(connection, msg).await
     }
     
