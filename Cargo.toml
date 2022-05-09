@@ -2,6 +2,13 @@
 name = "tf2"
 version = "0.1.0"
 edition = "2021"
+description = "Team Fortress 2 GC messages for use with steam-vent."
+authors = ["Julia"]
+homepage = "https://github.com/juliarose/tf2"
+repository = "https://github.com/juliarose/tf2"
+license = "MIT"
+keywords = ["tf2", "steam"]
+readme = "README.md"
 
 [dependencies]
 tf2-protobuf = { version = "0.1.0", path = "./tf2-protobuf" }
